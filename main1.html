@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Smart University Portal</title>
+  <style>
+    body { background-color: #FFFDD0; font-family: Arial, sans-serif; margin: 0; padding: 1.25rem; }
+    .logo { position: absolute; top: 2.25rem; left: 2.25rem; font-size: 1.5rem; font-weight: bold; color: #2c3e50; }
+    .logo img { height: 8.75rem; max-width: 100%; }
+    .verification-container { text-align: center; margin-top: 9.375rem; padding: 0 1rem; }
+    .mic-button { width: 5rem; height: 5rem; border-radius: 50%; background-color: #3498db; cursor: pointer; margin: 1.25rem auto; border: none; transition: transform 0.3s; }
+    .mic-button.recording { background-color: #e74c3c; animation: pulse 1s infinite; }
+    @keyframes pulse { 0%{transform:scale(1)}50%{transform:scale(1.1)}100%{transform:scale(1)} }
+    .instructions { font-size: 1.125rem; color: #34495e; margin-bottom: 1.875rem; }
+    .result { margin-top: 1.25rem; font-size: 1rem; padding: 0.625rem; border-radius: 0.3125rem; }
+  </style>
+</head>
+<body>
+  <div class="logo">
+    <img src="{{ url_for('static', filename='image.png') }}" alt="Image">
+
+  </div>
+  <div class="verification-container">
+    <h1>Human Voice Verification System</h1>
+    <p class="instructions">Press the microphone button and spell your name</p>
+    <button class="mic-button" id="micButton"></button>
+    <div id="result" class="result"></div>
+  </div>
+
+  <script>
+    const micButton = document.getElementById("micButton");
+    let mediaRecorder, audioChunks = [];
+
+    micButton.addEventListener("click", async () => {
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        mediaRecorder = new MediaRecorder(stream);
+        audioChunks = [];
+
+        mediaRecorder.ondataavailable = e => audioChunks.push(e.data);
+        mediaRecorder.onstop = async () => {
+          const blob = new Blob(audioChunks, { type: "audio/wav" });
+          const form = new FormData();
+          form.append("audio", blob, "recording.wav");
+
+          const res = await fetch("http://127.0.0.1:81/predict", { method: "POST", body: form });
+          const data = await res.json();
+          const div = document.getElementById("result");
+
+          if (data.error) {
+            div.innerHTML = `❌ Error: ${data.error}`;
+          } else {
+            const rf = data.rf_prediction, cnn = data.cnn_prediction;
+            const verdict = (rf === "Human" || cnn === "Human") ? "✅ Human Verified" : "❌ AI Detected";
+            div.innerHTML = `
+              <strong>Random Forest:</strong> ${rf}<br>
+              <strong>CNN:</strong> ${cnn}<br>
+              <strong>Verdict:</strong> ${verdict}
+            `;
+          }
+        };
+
+        micButton.classList.add("recording");
+        mediaRecorder.start();
+        setTimeout(() => {
+          mediaRecorder.stop();
+          micButton.classList.remove("recording");
+        }, 5000);
+      } catch (err) {
+        alert("Microphone access is required.");
+      }
+    });
+  </script>
+</body>
+</html>
+
